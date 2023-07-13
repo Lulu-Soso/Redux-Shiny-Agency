@@ -10,12 +10,14 @@ import Header from './components/Header'
 import Footer from './components/Footer'
 import Error from './components/Error'
 import GlobalStyle from './utils/style/GlobalStyle'
-import { ThemeProvider, SurveyProvider } from './utils/context'
+import { SurveyProvider } from './utils/context'
+import { Provider } from 'react-redux'
+import store from './utils/store'
 
 ReactDOM.render(
-  <React.StrictMode>
-    <Router>
-      <ThemeProvider>
+  <Provider store={store}>
+    <React.StrictMode>
+      <Router>
         <SurveyProvider>
           <GlobalStyle />
           <Header />
@@ -42,8 +44,8 @@ ReactDOM.render(
           </Switch>
           <Footer />
         </SurveyProvider>
-      </ThemeProvider>
-    </Router>
-  </React.StrictMode>,
+      </Router>
+    </React.StrictMode>
+  </Provider>,
   document.getElementById('root')
 )
