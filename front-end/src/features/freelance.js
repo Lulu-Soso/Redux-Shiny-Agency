@@ -1,6 +1,5 @@
-import { produce } from 'immer'
 import { selectFreelance } from '../utils/selectors'
-import { createAction } from '@reduxjs/toolkit'
+import { createSlice } from '@reduxjs/toolkit'
 
 // le state initial de cette feature est un objet vide
 const initialState = {
@@ -8,101 +7,97 @@ const initialState = {
   // 3: { status: 'void' }
 }
 
-const FETCHING = 'freelance/fetching'
-const REJECTED = 'freelance/rejected'
-
-// les actions contiennent l'Id du freelance en payload
-
-const freelanceFetching = (freelanceId) => ({
-  type: FETCHING,
-  payload: { freelanceId },
-})
-
-const freelanceResolved = createAction(
-  'freelance/resolved',
-  (freelanceId, data) => {
-    return {
-      payload: { freelanceId, data },
+export function fetchOrUpdateFreelance(freelanceId) {
+  // on retourne un thunk
+  return async (dispatch, getState) => {
+    // ...
+    const selectFreelanceById = selectFreelance(freelanceId)
+    const status = selectFreelanceById(getState()).status
+    if (status === 'pending' || status === 'updating') {
+      return
     }
-  }
-)
-
-const freelanceRejected = (freelanceId, error) => ({
-  type: REJECTED,
-  payload: { freelanceId, error },
-})
-
-export async function fetchOrUpdateFreelance(store, freelanceId) {
-  const selectFreelanceById = selectFreelance(freelanceId)
-  const status = selectFreelanceById(store.getState()).status
-  if (status === 'pending' || status === 'updating') {
-    return
-  }
-  store.dispatch(freelanceFetching(freelanceId))
-  try {
-    const response = await fetch(
-      `http://localhost:8000/freelance?id=${freelanceId}`
-    )
-    const data = await response.json()
-    store.dispatch(freelanceResolved(freelanceId, data))
-  } catch (error) {
-    store.dispatch(freelanceRejected(freelanceId, error))
+    dispatch(actions.fetching(freelanceId))
+    try {
+      const response = await fetch(
+        `http://localhost:8000/freelance?id=${freelanceId}`
+      )
+      const data = await response.json()
+      dispatch(actions.resolved(freelanceId, data))
+    } catch (error) {
+      dispatch(actions.rejected(freelanceId, error))
+    }
   }
 }
 
-export default function freelanceReducer(state = initialState, action) {
-  const { type, payload } = action
-  return produce(state, (draft) => {
-    // si l'action est une des action de freelance
-    if (type === freelanceResolved.toString() || type === FETCHING || type === REJECTED) {
-      // on vérifie que le state contient la propriété correspondante à l'Id du freelance
-      if (draft[payload.freelanceId] === undefined) {
-        // si elle n'existe pas, on l'initialise avec void
-        draft[payload.freelanceId] = { status: 'void' }
-      }
-    }
-    switch (type) {
-      case FETCHING: {
-        if (draft[payload.freelanceId].status === 'void') {
-          draft[payload.freelanceId].status = 'pending'
-          return
-        }
-        if (draft[payload.freelanceId].status === 'rejected') {
-          draft[payload.freelanceId].error = null
-          draft[payload.freelanceId].status = 'pending'
-          return
-        }
-        if (draft[payload.freelanceId].status === 'resolved') {
-          draft[payload.freelanceId].status = 'updating'
-          return
-        }
-        return
-      }
-      case freelanceResolved.toString(): {
-        if (
-          draft[payload.freelanceId].status === 'pending' ||
-          draft[payload.freelanceId].status === 'updating'
-        ) {
-          draft[payload.freelanceId].data = payload.data
-          draft[payload.freelanceId].status = 'resolved'
-          return
-        }
-        return
-      }
-      case REJECTED: {
-        if (
-          draft[payload.freelanceId].status === 'pending' ||
-          draft[payload.freelanceId].status === 'updating'
-        ) {
-          draft[payload.freelanceId].error = payload.error
-          draft[payload.freelanceId].data = null
-          draft[payload.freelanceId].status = 'rejected'
-          return
-        }
-        return
-      }
-      default:
-        return
-    }
-  })
+function setVoidIfUndefined(draft, freelanceId) {
+  if (draft[freelanceId] === undefined) {
+    draft[freelanceId] = { status: 'void' }
+  }
 }
+
+const { actions, reducer } = createSlice({
+  name: 'freelance',
+  initialState,
+  reducers: {
+    fetching: {
+      prepare: (freelanceId) => ({
+        payload: { freelanceId },
+      }),
+      reducer: (draft, action) => {
+        setVoidIfUndefined(draft, action.payload.freelanceId)
+        if (draft[action.payload.freelanceId].status === 'void') {
+          draft[action.payload.freelanceId].status = 'pending'
+          return
+        }
+        if (draft[action.payload.freelanceId].status === 'rejected') {
+          draft[action.payload.freelanceId].error = null
+          draft[action.payload.freelanceId].status = 'pending'
+          return
+        }
+        if (draft[action.payload.freelanceId].status === 'resolved') {
+          draft[action.payload.freelanceId].status = 'updating'
+          return
+        }
+      },
+    },
+    resolved: {
+      // prepare permet de modifier le payload
+      prepare: (freelanceId, data) => ({
+        payload: { freelanceId, data },
+      }),
+      // la fonction de reducer
+      reducer: (draft, action) => {
+        setVoidIfUndefined(draft, action.payload.freelanceId)
+        if (
+          draft[action.payload.freelanceId].status === 'pending' ||
+          draft[action.payload.freelanceId].status === 'updating'
+        ) {
+          draft[action.payload.freelanceId].data = action.payload.data
+          draft[action.payload.freelanceId].status = 'resolved'
+          return
+        }
+        return
+      },
+    },
+    rejected: {
+      prepare: (freelanceId, error) => ({
+        payload: { freelanceId, error },
+      }),
+      reducer: (draft, action) => {
+        setVoidIfUndefined(draft, action.payload.freelanceId)
+        if (
+          draft[action.payload.freelanceId].status === 'pending' ||
+          draft[action.payload.freelanceId].status === 'updating'
+        ) {
+          draft[action.payload.freelanceId].error = action.payload.error
+          draft[action.payload.freelanceId].data = null
+          draft[action.payload.freelanceId].status = 'rejected'
+          return
+        }
+        return
+      },
+    },
+  },
+})
+
+export default reducer
