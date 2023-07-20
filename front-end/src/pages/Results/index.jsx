@@ -1,12 +1,10 @@
-import { useContext, useEffect } from 'react'
 import styled from 'styled-components'
 import EmptyList from '../../components/EmptyList'
-import { SurveyContext } from '../../utils/context'
 import colors from '../../utils/style/colors'
 import { StyledLink, Loader } from '../../utils/style/Atoms'
-import { useDispatch, useSelector } from 'react-redux'
-import { selectResults, selectTheme } from '../../utils/selectors'
-import { fetchOrUpdateResults } from '../../features/results'
+import { useSelector } from 'react-redux'
+import { selectAnswers, selectTheme } from '../../utils/selectors'
+import { useQuery } from 'react-query'
 
 const ResultsContainer = styled.div`
   display: flex;
@@ -75,25 +73,25 @@ export function formatJobList(title, listLength, index) {
 
 function Results() {
   const theme = useSelector(selectTheme)
-  const { answers } = useContext(SurveyContext)
+  const answers = useSelector(selectAnswers)
   const fetchParams = formatQueryParams(answers)
-  const results = useSelector(selectResults)
-  const dispatch = useDispatch()
 
-  useEffect(() => {
-    dispatch(fetchOrUpdateResults(fetchParams))
-  }, [dispatch, fetchParams])
+  const { error, data, isLoading } = useQuery(
+    ['results', fetchParams],
+    async () => {
+      const response = await fetch(
+        `http://localhost:8000/results?${fetchParams}`
+      )
+      const data = await response.json()
+      return data
+    }
+  )
 
-  if (results.status === 'rejected') {
+  if (error) {
     return <span>Il y a un problème</span>
   }
 
-  const resultsData = results.data?.resultsData
-
-  const isLoading =
-    results.status === 'void' ||
-    results.status === 'pending' ||
-    results.status === 'updating'
+  const resultsData = data?.resultsData
 
   if (resultsData?.length < 1) {
     return <EmptyList theme={theme} />
